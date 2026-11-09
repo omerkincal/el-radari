@@ -30,12 +30,51 @@ for (const [gesture,title] of Object.entries(labels)) {
 let repeatHeld = false;
 let sending = false;
 let candidate = '', since = 0, absentSince = null, activeGesture = '', last = -Infinity;
-function applyProfile() {
+const profile = get('profile');
+const repeatSpeed = get('repeat-speed');
+const settingsKey = 'el-radari-settings';
+let settings = {};
+try { settings = JSON.parse(localStorage.getItem(settingsKey)) || {}; } catch {}
 
-  const preset = profiles[get('profile').value];
-  for (const [gesture,select] of Object.entries(bindings)) select.value = preset[gesture] || '';
+function saveSettings() {
+  try { localStorage.setItem(settingsKey, JSON.stringify(settings)); } catch {}
 }
-get('profile').addEventListener('change',applyProfile);
+
+function applyProfile() {
+  const preset = profiles[profile.value];
+  const saved = settings.bindings?.[profile.value];
+  for (const [gesture,select] of Object.entries(bindings)) {
+    const command = saved?.[gesture];
+    select.value = typeof command === 'string' && Object.hasOwn(titles,command)
+      ? command : preset[gesture] || '';
+  }
+}
+
+if (Object.hasOwn(profiles,settings.profile)) profile.value = settings.profile;
+if (['700','850','1200'].includes(settings.repeatSpeed)) repeatSpeed.value = settings.repeatSpeed;
+profile.onchange = () => {
+  settings.profile = profile.value;
+  applyProfile();
+  saveSettings();
+};
+repeatSpeed.onchange = () => {
+  settings.repeatSpeed = repeatSpeed.value;
+  saveSettings();
+};
+for (const select of Object.values(bindings)) {
+  select.onchange = () => {
+    settings.bindings = {...settings.bindings, [profile.value]: Object.fromEntries(
+      Object.entries(bindings).map(([gesture,input]) => [gesture,input.value])
+    )};
+    saveSettings();
+  };
+}
+get('reset-profile').onclick = () => {
+  settings.bindings = {...settings.bindings};
+  delete settings.bindings[profile.value];
+  applyProfile();
+  saveSettings();
+};
 applyProfile();
 
 const target = get('target');
@@ -45,6 +84,12 @@ const bridgeStatus = get('bridge-status');
 let bridgeCode = '';
 let cameraReady = false;
 let pausedByFist = false;
+const resume = get('resume-control');
+resume.onclick = () => {
+  pausedByFist = false;
+  resume.hidden = true;
+  status.textContent = 'Kontrol devam ediyor. Yeni komut için elini kısa süre kadrajdan çıkar.';
+};
 
 function controlsActive() {
   return cameraReady && !pausedByFist && (target.value === 'page' || Boolean(bridgeCode));
@@ -194,6 +239,7 @@ get('prev').onclick = () => announce('prev');
 export function setCameraReady(ready) {
   cameraReady = ready;
   pausedByFist = false;
+  resume.hidden = true;
   if (ready) status.textContent = 'Kamera hazır. Hareket komutları otomatik çalışır.';
   updateTestButtons();
 
@@ -209,7 +255,7 @@ export function runGesture(gesture, now) {
   const repeats = gesture !== 'right' && gesture !== 'left' &&
     (command === 'louder' || command === 'quieter');
   const continuing = repeats && repeatHeld && activeGesture === gesture && candidate === gesture;
-  if (!controlsActive() || !command || sending || (activeGesture && !continuing) || now - last < 850) return;
+  if (!controlsActive() || !command || sending || (activeGesture && !continuing) || now - last < (continuing ? Number(repeatSpeed.value) : 850)) return;
   last = now;
   activeGesture = gesture;
   repeatHeld = repeats;
@@ -241,10 +287,13 @@ export function handleGesture(gesture, hasHand, now) {
     since = now;
   }
   if (now - since < (gesture === 'Open_Palm' ? 750 : 500)) return;
-  if (gesture === 'Closed_Fist' && controlsActive()) {
+  if (gesture === 'Closed_Fist' && activeGesture !== 'Closed_Fist' && controlsActive()) {
 
     pausedByFist = true;
-    status.textContent = 'Hareketle kontrol duraklatıldı. Devam etmek için kamerayı yeniden başlat.';
+    activeGesture = 'Closed_Fist';
+    repeatHeld = false;
+    resume.hidden = false;
+    status.textContent = 'Hareketle kontrol duraklatıldı.';
     return;
   }
   runGesture(gesture,now);
