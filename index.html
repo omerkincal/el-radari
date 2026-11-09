@@ -10,7 +10,6 @@
 <p>Kamera görüntüsü tarayıcıda işlenir. Model ve çalışma dosyaları ilk açılışta internetten yüklenir.</p>
 <div class="grid controls"><section class="panel">
 <h2>Hareketlere komut ata</h2>
-<label><input id="arm" type="checkbox" disabled> Hareketle kontrolü aç</label>
 <label>Profil <select id="profile"><option value="mixed">Karma</option><option value="slides">Sunum</option><option value="media">Medya</option><option value="sound">Ses</option></select></label>
 <label>Komut hedefi <select id="target"><option value="page">Bu sayfa</option><option value="windows">Windows bilgisayar</option></select></label>
 <div id="windows-panel" hidden>
@@ -20,7 +19,7 @@
 <div class="actions"><button id="test-volume" type="button" disabled>Sesi azaltmayı dene</button><button id="test-play" type="button" disabled>Oynat / duraklatmayı dene</button></div><p id="bridge-status" role="status">Bağlantı kapalı.</p>
 </div>
 <div id="bindings"></div>
-<p>Ses artırma ve azaltma, işareti tuttuğun sürece tekrarlanır. Yeni bir komut için elini kısa süre kadrajdan çıkar. Yumruk kontrolü kapatır.</p>
+<p>Ses artırma ve azaltma, işareti tuttuğun sürece tekrarlanır. Yeni bir komut için elini kısa süre kadrajdan çıkar. Kamera hazır olduğunda komutlar otomatik çalışır. Yumruk kontrolü duraklatır. Devam etmek için kamerayı yeniden başlat.</p>
 <p id="action-status" role="status">Henüz komut çalışmadı.</p>
 </section><section class="panel workbench">
 <h2>Sunum ve medya</h2>
