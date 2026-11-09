@@ -34,6 +34,7 @@ let sending = false;
 let candidate = '', since = 0, absentSince = null, activeGesture = '', last = -Infinity;
 const profile = get('profile');
 const repeatSpeed = get('repeat-speed');
+const responseSpeed = get('response-speed');
 const settingsKey = 'el-radari-settings';
 let settings = {};
 try { settings = JSON.parse(localStorage.getItem(settingsKey)) || {}; } catch {}
@@ -54,6 +55,11 @@ function applyProfile() {
 
 if (Object.hasOwn(profiles,settings.profile)) profile.value = settings.profile;
 if (['700','850','1200'].includes(settings.repeatSpeed)) repeatSpeed.value = settings.repeatSpeed;
+if (['fast','normal','steady'].includes(settings.responseSpeed)) responseSpeed.value = settings.responseSpeed;
+responseSpeed.onchange = () => {
+  settings.responseSpeed = responseSpeed.value;
+  saveSettings();
+};
 profile.onchange = () => {
   settings.profile = profile.value;
   applyProfile();
@@ -298,7 +304,9 @@ export function handleGesture(gesture, hasHand, now) {
     candidate = gesture;
     since = now;
   }
-  if (now - since < (gesture === 'Open_Palm' ? 750 : 500)) return;
+  const hold = {fast:250, normal:350, steady:500}[responseSpeed.value] ?? 350;
+  // Give a moving open palm time to register as a swipe before a static command.
+  if (now - since < hold + (gesture === 'Open_Palm' ? 250 : 0)) return;
   if (gesture === 'Closed_Fist' && activeGesture !== 'Closed_Fist' && (controlsActive() || (practice.checked && cameraReady && !pausedByFist))) {
 
     pausedByFist = true;
