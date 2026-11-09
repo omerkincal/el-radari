@@ -1,0 +1,34 @@
+<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>El Radarı</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101518;color:#eff7f2;font:16px system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:32px 22px}header{border-bottom:1px solid #304038;padding-bottom:16px;color:#a4ffc4;letter-spacing:.16em;font-size:13px}h1{font-size:clamp(42px,8vw,84px);letter-spacing:-.07em;margin:24px 0 0}p{color:#b8c7bf;line-height:1.55}.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:28px}.panel{background:#17201e;border:1px solid #304038;border-radius:16px;padding:18px}.stage{display:grid;place-items:center;position:relative;overflow:hidden;aspect-ratio:4/3;background:repeating-linear-gradient(0deg,#111917 0 27px,#21332a 28px);border-radius:10px}.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform:scaleX(-1)}.stage span{z-index:1;color:#b8c7bf;text-align:center;padding:18px}button{background:#a4ffc4;color:#102015;border:0;border-radius:8px;font:inherit;font-weight:750;padding:12px 18px;cursor:pointer}button:disabled{opacity:.55}small{color:#a4ffc4;letter-spacing:.08em}output{display:block;font-size:28px;font-weight:bold;margin-top:8px}hr{border:0;border-top:1px solid #304038;margin:20px 0}ul{padding-left:20px;color:#b8c7bf;line-height:1.6}#status{min-height:3em;margin-bottom:0}@media(max-width:720px){.grid{grid-template-columns:1fr}}
+
+.controls{margin-top:16px}.controls h2{margin-top:0}.controls label{display:flex;align-items:center;gap:10px;margin:10px 0;flex-wrap:wrap}.controls select,.controls input{font:inherit;color:inherit;max-width:100%}.controls select{background:#111917;padding:7px;border:1px solid #52685c;border-radius:6px}.workbench{margin-top:16px}.workbench video,.workbench img{display:block;width:100%;max-height:430px;object-fit:contain;background:#101518}.workbench [hidden]{display:none}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{padding:8px 12px}
+</style>
+<main><header>EL RADARI / KAMERA LABORATUVARI</header><h1>Elini göster.</h1><p>El işaretlerini ve sağa veya sola kaydırma hareketini canlı algıla.</p>
+<div class="grid"><section class="panel" aria-label="Kamera"><div class="stage"><video playsinline muted></video><canvas aria-hidden="true"></canvas><span id="placeholder">Kamera kapalı</span></div><p><button id="toggle">Kamerayı başlat</button></p><p id="status" role="status">Başlamak için kamera izni ver.</p></section>
+<section class="panel" aria-label="Algılama sonuçları"><small>EL İŞARETİ</small><output id="gesture">—</output><p id="confidence">Model skoru —</p><hr><small>SON HAREKET</small><output id="motion">—</output><hr><small>NE DENEYEBİLİRSİN?</small><ul><li>Açık avuç veya yumruk</li><li>Başparmak yukarı veya aşağı</li><li>Zafer işareti (V)</li><li>İşaret parmağı yukarı</li><li>Seni seviyorum (🤟)</li><li>Avucunu açıp sağa veya sola kaydır</li></ul></section></div>
+<p>Kamera görüntüsü tarayıcıda işlenir. Model ve çalışma dosyaları ilk açılışta internetten yüklenir.</p>
+<div class="grid controls"><section class="panel">
+<h2>Hareketlere komut ata</h2>
+<label><input id="arm" type="checkbox" disabled> Hareketle kontrolü aç</label>
+<label>Profil <select id="profile"><option value="mixed">Karma</option><option value="slides">Sunum</option><option value="media">Medya</option><option value="sound">Ses</option></select></label>
+<label>Komut hedefi <select id="target"><option value="page">Bu sayfa</option><option value="windows">Windows bilgisayar</option></select></label>
+<div id="windows-panel" hidden>
+<p>Windows yardımcısını çalıştırıp bu sekmeye bağlantı kodunu gir. Tarayıcı yerel ağ izni isterse izin ver.</p>
+<label>Bağlantı kodu <input id="bridge-code" type="password" autocomplete="off" spellcheck="false" maxlength="64"></label>
+<button id="bridge-connect" type="button">Windows’a bağlan</button>
+<div class="actions"><button id="test-volume" type="button" disabled>Sesi azaltmayı dene</button><button id="test-play" type="button" disabled>Oynat / duraklatmayı dene</button></div><p id="bridge-status" role="status">Bağlantı kapalı.</p>
+</div>
+<div id="bindings"></div>
+<p>Ses artırma ve azaltma, işareti tuttuğun sürece tekrarlanır. Yeni bir komut için elini kısa süre kadrajdan çıkar. Yumruk kontrolü kapatır.</p>
+<p id="action-status" role="status">Henüz komut çalışmadı.</p>
+</section><section class="panel workbench">
+<h2>Sunum ve medya</h2>
+<label>Slayt görselleri <input id="slides" type="file" accept="image/*" multiple></label>
+<img id="slide" alt="Seçili slayt" hidden>
+<p id="slide-info"></p><div class="actions"><button id="prev" type="button">Önceki</button><button id="next" type="button">Sonraki</button></div>
+<label>Ses veya video dosyaları <input id="tracks" type="file" accept="audio/*,video/*" multiple></label>
+<video id="player" controls playsinline></video><p id="track-info"></p>
+</section></div>
+<p>Slayt ve medya dosyaları bu sekmede açılır. Windows hedefi seçildiğinde hareket komutları bağlı bilgisayara iletilir.</p></main>
+<script type="module" src="./app.mjs"></script></html>
