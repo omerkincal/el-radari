@@ -7,9 +7,13 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Drawing;
+using System.Threading;
+using System.Windows.Forms;
 
 public static class Radar
 {
+    static volatile bool paused;
     const string Host = "127.0.0.1:8765";
     const string Origin = "http://" + Host;
     static readonly Dictionary<string, byte> Keys = new Dictionary<string, byte> {
@@ -25,13 +29,41 @@ public static class Radar
         using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(secret);
         string code = Convert.ToBase64String(secret).Replace('+', '-').Replace('/', '_');
         var server = new TcpListener(IPAddress.Loopback, 8765);
-        var clock = Stopwatch.StartNew();
-        long last = -1000;
         server.Start();
         try {
-            Console.WriteLine("El Radari: " + Origin + "\nDurdurmak icin bu pencereyi kapat.");
-            Console.WriteLine("Baglanti kodu: " + code);
-            Process.Start(new ProcessStartInfo(Origin + "/#code=" + code) { UseShellExecute = true });
+            var worker = new Thread(() => Serve(server, folder, code)) { IsBackground = true };
+            worker.Start();
+            using (var menu = new ContextMenuStrip())
+            using (var tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "El Radari" }) {
+                var open = menu.Items.Add("Paneli ac");
+                open.Click += (sender, args) => OpenPanel(code);
+                var toggle = menu.Items.Add("Windows komutlarini duraklat");
+                toggle.Click += (sender, args) => {
+                    paused = !paused;
+                    toggle.Text = paused ? "Windows komutlarini surdur" : "Windows komutlarini duraklat";
+                };
+                menu.Items.Add("Cikis").Click += (sender, args) => Application.ExitThread();
+                tray.ContextMenuStrip = menu;
+                tray.DoubleClick += (sender, args) => OpenPanel(code);
+                tray.Visible = true;
+                Console.WriteLine("El Radari hazir. Tepsideki simgeden kontrol edebilirsin.");
+                OpenPanel(code);
+                Application.Run();
+                tray.Visible = false;
+            }
+        } finally { server.Stop(); }
+    }
+
+    static void OpenPanel(string code)
+    {
+        Process.Start(new ProcessStartInfo(Origin + "/#code=" + code) { UseShellExecute = true });
+    }
+
+    static void Serve(TcpListener server, string folder, string code)
+    {
+        var clock = Stopwatch.StartNew();
+        long last = -1000;
+        try {
             while (true) {
                 using (var client = server.AcceptTcpClient()) {
                     client.ReceiveTimeout = 1500;
@@ -40,7 +72,7 @@ public static class Radar
                     catch (IOException) {}
                 }
             }
-        } finally { server.Stop(); }
+        } catch (SocketException) {} catch (InvalidOperationException) {}
     }
 
     static void Handle(NetworkStream stream, string folder, string code, Stopwatch clock, ref long last)
@@ -86,6 +118,7 @@ public static class Radar
             !Keys.TryGetValue(path.Substring(9), out key)) {
             Reply(stream, "404 Not Found"); return;
         }
+        if (paused) { Reply(stream, "423 Locked"); return; }
         long now = clock.ElapsedMilliseconds;
         if (now - last < 650) { Reply(stream, "429 Too Many Requests"); return; }
         keybd_event(key, 0, 1, UIntPtr.Zero);
