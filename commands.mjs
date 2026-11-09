@@ -2,6 +2,8 @@ const get = id => document.getElementById(id);
 const player = get('player');
 const slide = get('slide');
 const status = get('action-status');
+const practice = get('practice');
+const heightVolume = get('height-volume');
 const labels = {
   right:'Sağa kaydır', left:'Sola kaydır', Open_Palm:'Açık avuç',
   Thumb_Up:'Başparmak yukarı', Thumb_Down:'Başparmak aşağı',
@@ -114,6 +116,10 @@ async function bridgeRequest(path, code) {
     headers: {'X-Radar-Code': code},
     signal: AbortSignal.timeout(3500),
   });
+  if (response.status === 423) {
+    bridgeStatus.textContent = 'Windows komutları tepsiden duraklatıldı.';
+    return false;
+  }
   if (response.status === 429) return false;
   if (!response.ok) throw new Error('Windows yardımcı yanıtı: ' + response.status);
   return true;
@@ -238,6 +244,7 @@ get('prev').onclick = () => announce('prev');
 
 export function setCameraReady(ready) {
   cameraReady = ready;
+  pinchY = null;
   pausedByFist = false;
   resume.hidden = true;
   if (ready) status.textContent = 'Kamera hazır. Hareket komutları otomatik çalışır.';
@@ -250,18 +257,22 @@ export function setCameraReady(ready) {
   last = -Infinity;
 }
 
-export function runGesture(gesture, now) {
-  const command = bindings[gesture]?.value;
+export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   const repeats = gesture !== 'right' && gesture !== 'left' &&
     (command === 'louder' || command === 'quieter');
   const continuing = repeats && repeatHeld && activeGesture === gesture && candidate === gesture;
-  if (!controlsActive() || !command || sending || (activeGesture && !continuing) || now - last < (continuing ? Number(repeatSpeed.value) : 850)) return;
+  const ready = practice.checked ? cameraReady && !pausedByFist : controlsActive();
+  if (!ready || !command || sending || (activeGesture && !continuing) || now - last < (continuing ? Number(repeatSpeed.value) : 850)) return false;
   last = now;
   activeGesture = gesture;
   repeatHeld = repeats;
+  if (practice.checked) {
+    status.textContent = 'Prova · ' + titles[command];
+    return true;
+  }
   if (target.value === 'page') {
     announce(command);
-    return;
+    return true;
   }
   const code = bridgeCode;
   sending = true;
@@ -275,10 +286,11 @@ export function runGesture(gesture, now) {
     updateTestButtons();
     bridgeStatus.textContent = 'Windows bağlantısı kesildi. Yeniden bağlan.';
   }).finally(() => { sending = false; });
+  return true;
 }
 
 export function handleGesture(gesture, hasHand, now) {
-  if (!hasHand) {
+  if (!hasHand || gesture === 'neutral') {
     absentSince ??= now;
     if (now - absentSince >= 250) activeGesture = '';
   } else absentSince = null;
@@ -287,7 +299,7 @@ export function handleGesture(gesture, hasHand, now) {
     since = now;
   }
   if (now - since < (gesture === 'Open_Palm' ? 750 : 500)) return;
-  if (gesture === 'Closed_Fist' && activeGesture !== 'Closed_Fist' && controlsActive()) {
+  if (gesture === 'Closed_Fist' && activeGesture !== 'Closed_Fist' && (controlsActive() || (practice.checked && cameraReady && !pausedByFist))) {
 
     pausedByFist = true;
     activeGesture = 'Closed_Fist';
@@ -297,4 +309,27 @@ export function handleGesture(gesture, hasHand, now) {
     return;
   }
   runGesture(gesture,now);
+}
+
+let pinchY = null;
+export function handleHeight(points, now) {
+  if (!heightVolume.checked || !points) {
+    pinchY = null;
+    return false;
+  }
+  const distance = (a,b) => Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y);
+  const palm = distance(0,9);
+  const threshold = pinchY === null ? .25 : .38;
+  if (palm < .035 || distance(4,8) > palm * threshold) {
+    pinchY = null;
+    return false;
+  }
+  const y = (points[4].y + points[8].y) / 2;
+  pinchY ??= y;
+  handleGesture('pinch',true,now);
+  if (Math.abs(y - pinchY) >= .055 &&
+      runGesture('pinch',now,y < pinchY ? 'louder' : 'quieter')) {
+    pinchY = y;
+  }
+  return true;
 }
