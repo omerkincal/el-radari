@@ -4,6 +4,21 @@ const video = document.querySelector('video');
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 const toggle = get('toggle');
+const floating = get('floating-camera');
+floating.onclick = async () => {
+  try {
+    if (document.pictureInPictureElement === video) await document.exitPictureInPicture();
+    else await video.requestPictureInPicture();
+  } catch {
+    get('status').textContent = 'Küçük kamera penceresi açılamadı.';
+  }
+};
+video.addEventListener('enterpictureinpicture', () => {
+  floating.textContent = 'Küçük kamera penceresini kapat';
+});
+video.addEventListener('leavepictureinpicture', () => {
+  floating.textContent = 'Kamerayı küçük pencerede tut';
+});
 const labels = {
   Open_Palm: 'Açık avuç', Closed_Fist: 'Yumruk', Thumb_Up: 'Başparmak yukarı',
   Thumb_Down: 'Başparmak aşağı', Victory: 'Zafer işareti',
@@ -12,6 +27,7 @@ const labels = {
 const fingers = [[0,1,2,3,4],[0,5,6,7,8],[5,9,10,11,12],[9,13,14,15,16],[13,17,18,19,20],[17,0]];
 const cdn = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32';
 let model, stream, animation, generation = 0, previousFrame = -1, previousTime = 0;
+let frameCallback, samples = 0, measurementStart = 0;
 let trail = [], lastMotion = -Infinity;
 
 function draw(points) {
@@ -55,8 +71,13 @@ function trackSwipe(points, openPalm, now) {
 
 function stop(message = 'Kamera durduruldu.') {
   setCameraReady(false);
+  floating.hidden = true;
+  if (document.pictureInPictureElement === video) document.exitPictureInPicture().catch(() => {});
   generation++;
   clearInterval(animation);
+  if (frameCallback !== undefined) video.cancelVideoFrameCallback(frameCallback);
+  frameCallback = undefined;
+  get('tracking-rate').textContent = '—';
   stream?.getTracks().forEach(track => track.stop());
   stream = undefined;
   video.srcObject = null;
@@ -75,10 +96,16 @@ function stop(message = 'Kamera durduruldu.') {
 function tick() {
   const now = performance.now();
   try {
-    if (video.readyState >= 2 && previousFrame !== video.currentTime && now - previousTime >= 50) {
+    if (video.readyState >= 2 && previousFrame !== video.currentTime && now - previousTime >= 24) {
       previousFrame = video.currentTime;
       previousTime = now;
       const result = model.recognizeForVideo(video, now);
+      samples++;
+      if (now - measurementStart >= 1000) {
+        get('tracking-rate').textContent = Math.round(samples * 1000 / (now - measurementStart)) + ' kare/sn';
+        measurementStart = now;
+        samples = 0;
+      }
       const points = result.landmarks[0];
       const prediction = result.gestures[0]?.[0];
       const name = prediction?.score >= .6 ? labels[prediction.categoryName] : undefined;
@@ -144,8 +171,20 @@ toggle.addEventListener('click', async () => {
     previousFrame = -1;
     get('placeholder').hidden = true;
     setCameraReady(true);
+    floating.hidden = !document.pictureInPictureEnabled || !video.requestPictureInPicture;
     get('status').textContent = 'Kamera açık. Elini kadraja al.';
-    animation = setInterval(tick, 50);
+    samples = 0;
+    measurementStart = performance.now();
+    if (video.requestVideoFrameCallback) {
+      const onFrame = () => {
+        frameCallback = undefined;
+        tick();
+        if (stream && attempt === generation) frameCallback = video.requestVideoFrameCallback(onFrame);
+      };
+      frameCallback = video.requestVideoFrameCallback(onFrame);
+    }
+    // Also sample when the browser delivers fewer frame callbacks in the background.
+    animation = setInterval(tick, video.requestVideoFrameCallback ? 80 : 32);
   } catch (error) {
     if (attempt !== generation) return;
     const messages = {
