@@ -56,7 +56,18 @@ public static class Radar
 
     static void OpenPanel(string code)
     {
-        Process.Start(new ProcessStartInfo(Origin + "/#code=" + code) { UseShellExecute = true });
+        string url = Origin + "/#code=" + code;
+        foreach (var root in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) }) {
+            if (String.IsNullOrEmpty(root)) continue;
+            string edge = Path.Combine(root, @"Microsoft\Edge\Application\msedge.exe");
+            if (!File.Exists(edge)) continue;
+            try {
+                Process.Start(new ProcessStartInfo(edge, "--app=" + url) { UseShellExecute = false });
+                return;
+            } catch (System.ComponentModel.Win32Exception) {}
+        }
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
     static void Serve(TcpListener server, string folder, string code)
