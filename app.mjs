@@ -1,4 +1,4 @@
-import { handleGesture, runGesture, setCameraReady } from './commands.mjs';
+import { handleHeight, handleGesture, runGesture, setCameraReady } from './commands.mjs';
 const get = (id) => document.getElementById(id);
 const video = document.querySelector('video');
 const canvas = document.querySelector('canvas');
@@ -85,8 +85,14 @@ function tick() {
       get('gesture').textContent = name || (points ? 'Belirsiz işaret' : 'El görünmüyor');
       get('confidence').textContent = name ? 'Model skoru %' + Math.round(prediction.score * 100) : 'Model skoru —';
       draw(points);
-      trackSwipe(points, name === labels.Open_Palm, now);
-      handleGesture(name ? prediction.categoryName : '', Boolean(points), now);
+      if (handleHeight(points, now)) {
+        trail = [];
+        get('gesture').textContent = 'Parmaklar birleşik · ses ayarı';
+      } else {
+        const neutral = points && prediction?.categoryName === 'None' && prediction.score >= .6;
+        trackSwipe(points, name === labels.Open_Palm, now);
+        handleGesture(name ? prediction.categoryName : neutral ? 'neutral' : '', Boolean(points), now);
+      }
     }
 
   } catch {
