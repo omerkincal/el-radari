@@ -1,5 +1,4 @@
 const get = id => document.getElementById(id);
-const arm = get('arm');
 const player = get('player');
 const slide = get('slide');
 const status = get('action-status');
@@ -32,7 +31,7 @@ let repeatHeld = false;
 let sending = false;
 let candidate = '', since = 0, absentSince = null, activeGesture = '', last = -Infinity;
 function applyProfile() {
-  arm.checked = false;
+
   const preset = profiles[get('profile').value];
   for (const [gesture,select] of Object.entries(bindings)) select.value = preset[gesture] || '';
 }
@@ -45,17 +44,22 @@ const connect = get('bridge-connect');
 const bridgeStatus = get('bridge-status');
 let bridgeCode = '';
 let cameraReady = false;
+let pausedByFist = false;
 
-function updateArm() {
+function controlsActive() {
+  return cameraReady && !pausedByFist && (target.value === 'page' || Boolean(bridgeCode));
+}
+
+function updateTestButtons() {
   get('test-volume').disabled = !bridgeCode;
   get('test-play').disabled = !bridgeCode;
-  arm.disabled = !cameraReady || (target.value === 'windows' && !bridgeCode);
+
 }
 
 target.onchange = () => {
-  arm.checked = false;
+
   get('windows-panel').hidden = target.value !== 'windows';
-  updateArm();
+  updateTestButtons();
 };
 
 async function bridgeRequest(path, code) {
@@ -77,20 +81,20 @@ connect.onclick = async () => {
     return;
   }
   connect.disabled = true;
-  arm.checked = false;
+
   bridgeCode = '';
-  updateArm();
+  updateTestButtons();
   bridgeStatus.textContent = 'Bağlanıyor…';
   try {
     await bridgeRequest('/connect',code);
     bridgeCode = code;
     codeInput.value = '';
-    bridgeStatus.textContent = 'Windows bağlı. Hareketle kontrolü açabilirsin.';
+    bridgeStatus.textContent = 'Windows bağlı. Kamera hazır olduğunda hareket komutları otomatik çalışır.';
   } catch (error) {
     bridgeStatus.textContent = 'Bağlanılamadı. Yardımcıyı, kodu ve yerel ağ iznini kontrol et. ' + error.message;
   } finally {
     connect.disabled = false;
-    updateArm();
+    updateTestButtons();
   }
 };
 
@@ -189,8 +193,10 @@ get('prev').onclick = () => announce('prev');
 
 export function setCameraReady(ready) {
   cameraReady = ready;
-  updateArm();
-  arm.checked = false;
+  pausedByFist = false;
+  if (ready) status.textContent = 'Kamera hazır. Hareket komutları otomatik çalışır.';
+  updateTestButtons();
+
   candidate = '';
   absentSince = null;
   activeGesture = '';
@@ -203,7 +209,7 @@ export function runGesture(gesture, now) {
   const repeats = gesture !== 'right' && gesture !== 'left' &&
     (command === 'louder' || command === 'quieter');
   const continuing = repeats && repeatHeld && activeGesture === gesture && candidate === gesture;
-  if (!arm.checked || !command || sending || (activeGesture && !continuing) || now - last < 850) return;
+  if (!controlsActive() || !command || sending || (activeGesture && !continuing) || now - last < 850) return;
   last = now;
   activeGesture = gesture;
   repeatHeld = repeats;
@@ -219,8 +225,8 @@ export function runGesture(gesture, now) {
   }).catch(() => {
     if (bridgeCode !== code) return;
     bridgeCode = '';
-    if (target.value === 'windows') arm.checked = false;
-    updateArm();
+
+    updateTestButtons();
     bridgeStatus.textContent = 'Windows bağlantısı kesildi. Yeniden bağlan.';
   }).finally(() => { sending = false; });
 }
@@ -235,9 +241,10 @@ export function handleGesture(gesture, hasHand, now) {
     since = now;
   }
   if (now - since < (gesture === 'Open_Palm' ? 750 : 500)) return;
-  if (gesture === 'Closed_Fist' && arm.checked) {
-    arm.checked = false;
-    status.textContent = 'Hareketle kontrol duraklatıldı.';
+  if (gesture === 'Closed_Fist' && controlsActive()) {
+
+    pausedByFist = true;
+    status.textContent = 'Hareketle kontrol duraklatıldı. Devam etmek için kamerayı yeniden başlat.';
     return;
   }
   runGesture(gesture,now);
