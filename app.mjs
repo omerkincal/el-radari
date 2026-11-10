@@ -28,6 +28,30 @@ const fingers = [[0,1,2,3,4],[0,5,6,7,8],[5,9,10,11,12],[9,13,14,15,16],[13,17,1
 const cdn = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32';
 let model, stream, animation, generation = 0, previousFrame = -1, previousTime = 0;
 let frameCallback, samples = 0, measurementStart = 0;
+let shakeAnchor, shakeDirection, shakeTime, shakeUntil;
+function trackThumbShake(points, now) {
+  if (!points) {
+    shakeAnchor = undefined;
+    shakeDirection = 0;
+    shakeUntil = 0;
+    return false;
+  }
+  const x = points[0].x;
+  if (shakeAnchor === undefined || now - shakeTime > 450) {
+    shakeAnchor = x;
+    shakeDirection = 0;
+    shakeTime = now;
+  }
+  const delta = x - shakeAnchor;
+  if (Math.abs(delta) >= .065) {
+    const direction = Math.sign(delta);
+    if (shakeDirection && direction !== shakeDirection) shakeUntil = now + 450;
+    shakeDirection = direction;
+    shakeAnchor = x;
+    shakeTime = now;
+  }
+  return now < shakeUntil;
+}
 let trail = [], lastMotion = -Infinity;
 
 function draw(points) {
@@ -82,6 +106,7 @@ function stop(message = 'Kamera durduruldu.') {
   stream = undefined;
   video.srcObject = null;
   draw();
+  trackThumbShake();
   trail = [];
   lastMotion = -Infinity;
   get('placeholder').hidden = false;
@@ -112,13 +137,17 @@ function tick() {
       get('gesture').textContent = name || (points ? 'Belirsiz işaret' : 'El görünmüyor');
       get('confidence').textContent = name ? 'Model skoru %' + Math.round(prediction.score * 100) : 'Model skoru —';
       draw(points);
+      const shake = trackThumbShake(name === labels.Thumb_Up ? points : null, now);
       if (handleHeight(points, now)) {
         trail = [];
         get('gesture').textContent = 'Parmaklar birleşik · ses ayarı';
       } else {
         const neutral = points && prediction?.categoryName === 'None' && prediction.score >= .6;
         trackSwipe(points, name === labels.Open_Palm, now);
-        handleGesture(name ? prediction.categoryName : neutral ? 'neutral' : '', Boolean(points), now);
+        if (handleGesture(name ? prediction.categoryName : neutral ? 'neutral' : '', Boolean(points), now, shake)) {
+          shakeUntil = 0;
+          if (shake) get('motion').textContent = 'Başparmak sallama · hızlı ses artışı';
+        }
       }
     }
 
