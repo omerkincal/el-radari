@@ -23,6 +23,52 @@ public static class Radar
     [DllImport("user32.dll")]
     static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
 
+    [StructLayout(LayoutKind.Sequential)]
+    struct KeyboardInput {
+        public ushort VirtualKey, Scan;
+        public uint Flags, Time;
+        public UIntPtr Extra;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MouseInput {
+        public int X, Y;
+        public uint Data, Flags, Time;
+        public UIntPtr Extra;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    struct InputData {
+        [FieldOffset(0)] public KeyboardInput Keyboard;
+        [FieldOffset(0)] public MouseInput Mouse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct Input {
+        public uint Type;
+        public InputData Data;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern uint SendInput(uint count, Input[] inputs, int size);
+
+    static Input Key(ushort key, uint flags)
+    {
+        return new Input { Type = 1, Data = new InputData {
+            Keyboard = new KeyboardInput { VirtualKey = key, Flags = flags }
+        }};
+    }
+
+    static bool OpenTaskView()
+    {
+        var inputs = new[] { Key(0x5B, 1), Key(0x09, 0), Key(0x09, 2), Key(0x5B, 3) };
+        int size = Marshal.SizeOf(typeof(Input));
+        uint sent = SendInput((uint)inputs.Length, inputs, size);
+        if (sent == (uint)inputs.Length) return true;
+        if (sent > 0) SendInput(2, new[] { Key(0x09, 2), Key(0x5B, 3) }, size);
+        return false;
+    }
+
     public static void Run(string folder)
     {
         var secret = new byte[18];
@@ -143,13 +189,7 @@ public static class Radar
         long now = clock.ElapsedMilliseconds;
         if (now - last < 650) { Reply(stream, "429 Too Many Requests"); return; }
         if (path == "/command/taskView") {
-            keybd_event(0x5B, 0, 1, UIntPtr.Zero);
-            try {
-                keybd_event(key, 0, 0, UIntPtr.Zero);
-                keybd_event(key, 0, 2, UIntPtr.Zero);
-            } finally {
-                keybd_event(0x5B, 0, 3, UIntPtr.Zero);
-            }
+            if (!OpenTaskView()) { Reply(stream, "503 Service Unavailable"); return; }
             last = now;
             Reply(stream, "204 No Content");
             return;
