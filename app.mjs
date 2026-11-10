@@ -138,7 +138,7 @@ function tick() {
       get('confidence').textContent = name ? 'Model skoru %' + Math.round(prediction.score * 100) : 'Model skoru —';
       draw(points);
       const shake = trackThumbShake(name === labels.Thumb_Up ? points : null, now);
-      if (handleHeight(points, now)) {
+      if (handleHeight(name === labels.Closed_Fist ? null : points, now)) {
         trail = [];
         get('gesture').textContent = 'Parmaklar birleşik · ses ayarı';
       } else {
