@@ -18,7 +18,7 @@ public static class Radar
     const string Origin = "http://" + Host;
     static readonly Dictionary<string, byte> Keys = new Dictionary<string, byte> {
         { "next", 0x27 }, { "prev", 0x25 }, { "play", 0xB3 }, { "louder", 0xAF },
-        { "quieter", 0xAE }, { "mute", 0xAD }, { "nextTrack", 0xB0 }, { "prevTrack", 0xB1 }
+        { "louder10", 0xAF }, { "quieter", 0xAE }, { "mute", 0xAD }, { "nextTrack", 0xB0 }, { "prevTrack", 0xB1 }
     };
     [DllImport("user32.dll")]
     static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
@@ -142,8 +142,11 @@ public static class Radar
         if (paused) { Reply(stream, "423 Locked"); return; }
         long now = clock.ElapsedMilliseconds;
         if (now - last < 650) { Reply(stream, "429 Too Many Requests"); return; }
-        keybd_event(key, 0, 1, UIntPtr.Zero);
-        keybd_event(key, 0, 3, UIntPtr.Zero);
+        int steps = path == "/command/louder10" ? 5 : 1;
+        for (int step = 0; step < steps; step++) {
+            keybd_event(key, 0, 1, UIntPtr.Zero);
+            keybd_event(key, 0, 3, UIntPtr.Zero);
+        }
         last = now;
         Reply(stream, "204 No Content");
     }
