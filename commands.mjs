@@ -306,14 +306,15 @@ export function handleGesture(gesture, hasHand, now) {
   }
   const hold = {fast:250, normal:350, steady:500}[responseSpeed.value] ?? 350;
   // Give a moving open palm time to register as a swipe before a static command.
-  if (now - since < hold + (gesture === 'Open_Palm' ? 250 : 0)) return;
+  const requiredHold = gesture === 'Closed_Fist' ? 1200 : hold + (gesture === 'Open_Palm' ? 250 : 0);
+  if (now - since < requiredHold) return;
   if (gesture === 'Closed_Fist' && activeGesture !== 'Closed_Fist' && (controlsActive() || (practice.checked && cameraReady && !pausedByFist))) {
 
     pausedByFist = true;
     activeGesture = 'Closed_Fist';
     repeatHeld = false;
     resume.hidden = false;
-    status.textContent = 'Hareketle kontrol duraklatıldı.';
+    status.textContent = 'Yumruk 1,2 saniye algılandı. Hareketle kontrol duraklatıldı.';
     return;
   }
   runGesture(gesture,now);
