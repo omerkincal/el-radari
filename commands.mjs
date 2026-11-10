@@ -101,6 +101,7 @@ function controlsActive() {
 function updateTestButtons() {
   get('test-volume').disabled = !bridgeCode;
   get('test-play').disabled = !bridgeCode;
+  get('test-task-view').disabled = !bridgeCode;
 
 }
 
@@ -122,6 +123,11 @@ async function bridgeRequest(path, code) {
     return false;
   }
   if (response.status === 429) return false;
+  if (response.status === 503 && path === '/command/taskView') {
+    const error = new Error('Windows Win+Tab tuşlarını kabul etmedi (503).');
+    error.status = 503;
+    throw error;
+  }
   if (!response.ok) throw new Error('Windows yardımcı yanıtı: ' + response.status);
   return true;
 }
@@ -150,14 +156,14 @@ connect.onclick = async () => {
   }
 };
 
-for (const [id,command] of [['test-volume','quieter'],['test-play','play']]) {
+for (const [id,command] of [['test-volume','quieter'],['test-play','play'],['test-task-view','taskView']]) {
   get(id).onclick = async () => {
     try {
       if (!await bridgeRequest('/command/' + command,bridgeCode)) {
         bridgeStatus.textContent = 'Komutlar çok hızlı gönderildi. Bir saniye sonra tekrar dene.';
         return;
       }
-      bridgeStatus.textContent = 'Windows komutu gönderildi · ' + titles[command];
+      bridgeStatus.textContent = 'Windows komutu gönderildi · ' + (command === 'taskView' ? taskViewTitle : titles[command]);
     } catch (error) {
       bridgeStatus.textContent = 'Test başarısız. ' + error.message;
     }
@@ -279,8 +285,12 @@ export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   bridgeRequest('/command/' + command,code).then(sent => {
     if (!sent) return;
     status.textContent = 'Windows · ' + (command === 'louder10' ? boostTitle : command === 'taskView' ? taskViewTitle : titles[command]);
-  }).catch(() => {
+  }).catch(error => {
     if (bridgeCode !== code) return;
+    if (error.status === 503) {
+      status.textContent = error.message;
+      return;
+    }
     bridgeCode = '';
 
     updateTestButtons();
