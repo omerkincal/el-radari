@@ -91,16 +91,9 @@ const connect = get('bridge-connect');
 const bridgeStatus = get('bridge-status');
 let bridgeCode = '';
 let cameraReady = false;
-let pausedByFist = false;
-const resume = get('resume-control');
-resume.onclick = () => {
-  pausedByFist = false;
-  resume.hidden = true;
-  status.textContent = 'Kontrol devam ediyor. Yeni komut için elini kısa süre kadrajdan çıkar.';
-};
 
 function controlsActive() {
-  return cameraReady && !pausedByFist && (target.value === 'page' || Boolean(bridgeCode));
+  return cameraReady && (target.value === 'page' || Boolean(bridgeCode));
 }
 
 function updateTestButtons() {
@@ -251,8 +244,6 @@ get('prev').onclick = () => announce('prev');
 export function setCameraReady(ready) {
   cameraReady = ready;
   pinchY = null;
-  pausedByFist = false;
-  resume.hidden = true;
   if (ready) status.textContent = 'Kamera hazır. Hareket komutları otomatik çalışır.';
   updateTestButtons();
 
@@ -267,7 +258,7 @@ export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   const repeats = gesture !== 'right' && gesture !== 'left' &&
     (command === 'louder' || command === 'quieter');
   const continuing = repeats && repeatHeld && activeGesture === gesture && candidate === gesture;
-  const ready = practice.checked ? cameraReady && !pausedByFist : controlsActive();
+  const ready = practice.checked ? cameraReady : controlsActive();
   if (!ready || !command || sending || (activeGesture && !continuing) || now - last < (continuing ? Number(repeatSpeed.value) : 850)) return false;
   last = now;
   activeGesture = gesture;
@@ -296,7 +287,7 @@ export function runGesture(gesture, now, command = bindings[gesture]?.value) {
 }
 
 export function handleGesture(gesture, hasHand, now) {
-  if (!hasHand || gesture === 'neutral') {
+  if (!hasHand || gesture === 'neutral' || gesture === 'Closed_Fist') {
     absentSince ??= now;
     if (now - absentSince >= 250) activeGesture = '';
   } else absentSince = null;
@@ -306,17 +297,8 @@ export function handleGesture(gesture, hasHand, now) {
   }
   const hold = {fast:250, normal:350, steady:500}[responseSpeed.value] ?? 350;
   // Give a moving open palm time to register as a swipe before a static command.
-  const requiredHold = gesture === 'Closed_Fist' ? 1200 : hold + (gesture === 'Open_Palm' ? 250 : 0);
+  const requiredHold = hold + (gesture === 'Open_Palm' ? 250 : 0);
   if (now - since < requiredHold) return;
-  if (gesture === 'Closed_Fist' && activeGesture !== 'Closed_Fist' && (controlsActive() || (practice.checked && cameraReady && !pausedByFist))) {
-
-    pausedByFist = true;
-    activeGesture = 'Closed_Fist';
-    repeatHeld = false;
-    resume.hidden = false;
-    status.textContent = 'Yumruk 1,2 saniye algılandı. Hareketle kontrol duraklatıldı.';
-    return;
-  }
   runGesture(gesture,now);
 }
 
