@@ -14,6 +14,7 @@ const titles = {
   play:'Oynat / duraklat', louder:'Sesi artır', quieter:'Sesi azalt',
   mute:'Sesi kapat / aç', nextTrack:'Sonraki parça', prevTrack:'Önceki parça',
 };
+const boostTitle = 'Sesi hızlı artır';
 const profiles = {
   mixed:{right:'next',left:'prev',Open_Palm:'play',Thumb_Up:'louder',Thumb_Down:'quieter',Victory:'mute',Pointing_Up:'nextTrack',ILoveYou:'prevTrack'},
   slides:{right:'next',left:'prev'},
@@ -221,9 +222,10 @@ async function execute(command) {
       if (wasPlaying) await player.play();
       break;
     }
+    case 'louder10':
     case 'louder':
     case 'quieter':
-      player.volume = Math.max(0,Math.min(1,player.volume + (command === 'louder' ? .1 : -.1)));
+      player.volume = Math.max(0,Math.min(1,player.volume + (command === 'louder10' ? .1 : command === 'louder' ? .02 : -.1)));
       return `Ses seviyesi %${Math.round(player.volume * 100)}`;
     case 'mute':
       player.muted = !player.muted;
@@ -256,7 +258,7 @@ export function setCameraReady(ready) {
 
 export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   const repeats = gesture !== 'right' && gesture !== 'left' &&
-    (command === 'louder' || command === 'quieter');
+    (command === 'louder' || command === 'louder10' || command === 'quieter');
   const continuing = repeats && repeatHeld && activeGesture === gesture && candidate === gesture;
   const ready = practice.checked ? cameraReady : controlsActive();
   if (!ready || !command || sending || (activeGesture && !continuing) || now - last < (continuing ? Number(repeatSpeed.value) : 850)) return false;
@@ -264,7 +266,7 @@ export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   activeGesture = gesture;
   repeatHeld = repeats;
   if (practice.checked) {
-    status.textContent = 'Prova · ' + titles[command];
+    status.textContent = 'Prova · ' + (command === 'louder10' ? boostTitle : titles[command]);
     return true;
   }
   if (target.value === 'page') {
@@ -275,7 +277,7 @@ export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   sending = true;
   bridgeRequest('/command/' + command,code).then(sent => {
     if (!sent) return;
-    status.textContent = 'Windows · ' + titles[command];
+    status.textContent = 'Windows · ' + (command === 'louder10' ? boostTitle : titles[command]);
   }).catch(() => {
     if (bridgeCode !== code) return;
     bridgeCode = '';
@@ -286,7 +288,7 @@ export function runGesture(gesture, now, command = bindings[gesture]?.value) {
   return true;
 }
 
-export function handleGesture(gesture, hasHand, now) {
+export function handleGesture(gesture, hasHand, now, shake = false) {
   if (!hasHand || gesture === 'neutral' || gesture === 'Closed_Fist') {
     absentSince ??= now;
     if (now - absentSince >= 250) activeGesture = '';
@@ -299,7 +301,9 @@ export function handleGesture(gesture, hasHand, now) {
   // Give a moving open palm time to register as a swipe before a static command.
   const requiredHold = hold + (gesture === 'Open_Palm' ? 250 : 0);
   if (now - since < requiredHold) return;
-  runGesture(gesture,now);
+  const command = shake && gesture === 'Thumb_Up' && bindings.Thumb_Up.value === 'louder' ? 'louder10' : undefined;
+  const sent = runGesture(gesture,now,command);
+  return sent && command === 'louder10';
 }
 
 let pinchY = null;
