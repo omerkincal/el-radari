@@ -1,0 +1,12 @@
+{
+  "name": "el-radari-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "desktop.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "~42.11.3"
+  }
+}
