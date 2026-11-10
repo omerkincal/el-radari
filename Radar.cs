@@ -31,6 +31,16 @@ public static class Radar
         var server = new TcpListener(IPAddress.Loopback, 8765);
         server.Start();
         try {
+            if (Environment.GetEnvironmentVariable("EL_RADARI_DESKTOP") == "1") {
+                Console.WriteLine("RADAR_READY " + code);
+                var parentMonitor = new Thread(() => {
+                    Console.In.ReadLine();
+                    server.Stop();
+                }) { IsBackground = true };
+                parentMonitor.Start();
+                Serve(server, folder, code);
+                return;
+            }
             var worker = new Thread(() => Serve(server, folder, code)) { IsBackground = true };
             worker.Start();
             using (var menu = new ContextMenuStrip())
