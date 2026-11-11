@@ -14,6 +14,10 @@ using System.Windows.Forms;
 public static class Radar
 {
     static volatile bool paused;
+    static readonly object PointerLock = new object();
+    static bool pointerDown;
+    static long lastPointerUpdate;
+    static long lastPointerPacket;
     const string Host = "127.0.0.1:8765";
     const string Origin = "http://" + Host;
     static readonly Dictionary<string, byte> Keys = new Dictionary<string, byte> {
@@ -59,6 +63,41 @@ public static class Radar
         }};
     }
 
+    static Input Mouse(int x, int y, uint flags, uint data = 0)
+    {
+        return new Input { Type = 0, Data = new InputData {
+            Mouse = new MouseInput { X = x, Y = y, Flags = flags, Data = data }
+        }};
+    }
+
+    static void ReleasePointer()
+    {
+        lock (PointerLock) {
+            if (pointerDown && SendInput(1, new[] { Mouse(0, 0, 4) }, Marshal.SizeOf(typeof(Input))) == 1)
+                pointerDown = false;
+        }
+    }
+
+    static bool UpdatePointer(int x, int y, int button, int wheel)
+    {
+        lock (PointerLock) {
+            bool down = button == 1;
+            var inputs = new List<Input>();
+            if (wheel != 0) inputs.Add(Mouse(0, 0, 0x0800, unchecked((uint)wheel)));
+            else inputs.Add(Mouse(x, y, 0xC001));
+            if (pointerDown != down) inputs.Add(Mouse(0, 0, down ? 2u : 4u));
+            if (button == 2) {
+                inputs.Add(Mouse(0, 0, 8));
+                inputs.Add(Mouse(0, 0, 16));
+            }
+            uint sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(Input)));
+            if (sent != inputs.Count) return false;
+            pointerDown = down;
+            lastPointerUpdate = Stopwatch.GetTimestamp();
+            return true;
+        }
+    }
+
     static bool OpenTaskView()
     {
         var inputs = new[] { Key(0x5B, 1), Key(0x09, 0), Key(0x09, 2), Key(0x5B, 3) };
@@ -76,6 +115,12 @@ public static class Radar
         string code = Convert.ToBase64String(secret).Replace('+', '-').Replace('/', '_');
         var server = new TcpListener(IPAddress.Loopback, 8765);
         server.Start();
+        var pointerWatchdog = new System.Threading.Timer(_ => {
+            lock (PointerLock) {
+                if (paused || Stopwatch.GetTimestamp() - lastPointerUpdate > Stopwatch.Frequency / 2)
+                    ReleasePointer();
+            }
+        }, null, 100, 100);
         try {
             if (Environment.GetEnvironmentVariable("EL_RADARI_DESKTOP") == "1") {
                 Console.WriteLine("RADAR_READY " + code);
@@ -107,7 +152,11 @@ public static class Radar
                 Application.Run();
                 tray.Visible = false;
             }
-        } finally { server.Stop(); }
+        } finally {
+            server.Stop();
+            pointerWatchdog.Dispose();
+            ReleasePointer();
+        }
     }
 
     static void OpenPanel(string code)
@@ -180,6 +229,30 @@ public static class Radar
             Reply(stream, "403 Forbidden"); return;
         }
         if (path == "/connect") { Reply(stream, "204 No Content"); return; }
+        if (path.StartsWith("/pointer/", StringComparison.Ordinal)) {
+            if (paused) { Reply(stream, "423 Locked"); return; }
+            string[] values = path.Substring(9).Split('/');
+            int x, y, down, wheel;
+            if (values.Length != 4 || !Int32.TryParse(values[0], out x) ||
+                !Int32.TryParse(values[1], out y) || !Int32.TryParse(values[2], out down) ||
+                !Int32.TryParse(values[3], out wheel) || x < 0 || x > 65535 ||
+                y < 0 || y > 65535 || down < 0 || down > 2 || (wheel != -120 && wheel != 0 && wheel != 120)) {
+                Reply(stream, "400 Bad Request"); return;
+            }
+            long nowPointer = clock.ElapsedMilliseconds;
+            if (nowPointer - lastPointerPacket < 25) { Reply(stream, "429 Too Many Requests"); return; }
+            lastPointerPacket = nowPointer;
+            Reply(stream, UpdatePointer(x, y, down, wheel) ? "204 No Content" : "503 Service Unavailable");
+            return;
+        }
+        if (path == "/command/keyboard") {
+            if (paused) { Reply(stream, "423 Locked"); return; }
+            try {
+                Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "osk.exe")) { UseShellExecute = true });
+                Reply(stream, "204 No Content");
+            } catch (System.ComponentModel.Win32Exception) { Reply(stream, "503 Service Unavailable"); }
+            return;
+        }
         byte key;
         if (!path.StartsWith("/command/", StringComparison.Ordinal) ||
             !Keys.TryGetValue(path.Substring(9), out key)) {
