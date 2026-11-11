@@ -1,4 +1,4 @@
-import { handleHeight, handleGesture, runGesture, setCameraReady } from './commands.mjs';
+import { handlePointer, handleHeight, handleGesture, runGesture, setCameraReady } from './commands.mjs';
 const get = (id) => document.getElementById(id);
 const video = document.querySelector('video');
 const canvas = document.querySelector('canvas');
@@ -138,7 +138,9 @@ function tick() {
       get('confidence').textContent = name ? 'Model skoru %' + Math.round(prediction.score * 100) : 'Model skoru —';
       draw(points);
       const shake = trackThumbShake(name === labels.Thumb_Up ? points : null, now);
-      if (handleHeight(name === labels.Closed_Fist ? null : points, now)) {
+      if (handlePointer(points, name ? prediction.categoryName : '', now)) {
+        trail = [];
+      } else if (handleHeight(name === labels.Closed_Fist ? null : points, now)) {
         trail = [];
         get('gesture').textContent = 'Parmaklar birleşik · ses ayarı';
       } else {
