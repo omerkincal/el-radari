@@ -343,3 +343,92 @@ export function handleHeight(points, now) {
   }
   return true;
 }
+
+const pointerEnabled = get('pointer-enabled');
+const pointerStatus = get('pointer-status');
+let pointerMode = false;
+let modeSince = null, modeLatched = false;
+let palmSince = null, keyboardLatched = false;
+let cursorX, cursorY, scrollY, pinchDown = false;
+let rightLatched = false;
+let pointerSent = -Infinity, pointerBusy = false;
+
+function setPointerMode(enabled) {
+  pointerMode = enabled;
+  cursorX = cursorY = scrollY = undefined;
+  pinchDown = false;
+  rightLatched = false;
+  pointerStatus.textContent = enabled ? 'Fare modu etkin.' : 'Medya ve ses modu etkin.';
+}
+
+pointerEnabled.onchange = () => {
+  modeLatched = false;
+  modeSince = null;
+  setPointerMode(pointerEnabled.checked);
+};
+
+export function handlePointer(points, gesture, now) {
+  if (!pointerEnabled.checked || target.value !== 'windows' || !bridgeCode || practice.checked) return false;
+  if (gesture === 'ILoveYou') {
+    modeSince ??= now;
+    if (!modeLatched && now - modeSince >= 650) {
+      modeLatched = true;
+      setPointerMode(!pointerMode);
+    }
+    return true;
+  }
+  modeSince = null;
+  modeLatched = false;
+  if (!pointerMode) return false;
+  if (gesture !== 'Open_Palm') {
+    palmSince = null;
+    keyboardLatched = false;
+  }
+  if (!points) {
+    cursorX = cursorY = scrollY = undefined;
+    pinchDown = false;
+    rightLatched = false;
+    return true;
+  }
+  // Keep the existing Win+Tab gesture available in both modes.
+  if (gesture === 'Closed_Fist') {
+    pinchDown = false;
+    return false;
+  }
+  if (gesture === 'Open_Palm') {
+    palmSince ??= now;
+    if (!keyboardLatched && now - palmSince >= 900) {
+      keyboardLatched = true;
+      bridgeRequest('/command/keyboard', bridgeCode).then(sent => {
+        if (sent) pointerStatus.textContent = 'Ekran klavyesi istendi.';
+      }).catch(error => { pointerStatus.textContent = error.message; });
+    }
+  }
+  const distance = (a,b) => Math.hypot(points[a].x - points[b].x,points[a].y - points[b].y);
+  const palm = distance(0,9);
+  pinchDown = gesture !== 'Victory' && gesture !== 'Open_Palm' && palm > .035 &&
+    distance(4,8) < palm * (pinchDown ? .39 : .25);
+  const index = points[8];
+  const scale = value => Math.max(0, Math.min(65535, Math.round((value - .15) / .70 * 65535)));
+  const x = scale(1 - index.x), y = scale(index.y);
+  cursorX = cursorX === undefined ? x : cursorX * .55 + x * .45;
+  cursorY = cursorY === undefined ? y : cursorY * .55 + y * .45;
+  if (pointerBusy || now - pointerSent < 45) return true;
+  const rightPinch = !pinchDown && !['Open_Palm','Victory'].includes(gesture) && palm > .035 && distance(4,12) < palm * .25;
+  const rightClick = rightPinch && !rightLatched;
+  rightLatched = rightPinch;
+  let wheel = 0;
+  if (gesture === 'Victory') {
+    scrollY ??= index.y;
+    if (Math.abs(index.y - scrollY) < .045) return true;
+    wheel = index.y < scrollY ? 120 : -120;
+    scrollY = index.y;
+  } else scrollY = undefined;
+  pointerBusy = true;
+  pointerSent = now;
+  const path = '/pointer/' + [Math.round(cursorX), Math.round(cursorY), rightClick ? 2 : Number(pinchDown), wheel].join('/');
+  bridgeRequest(path, bridgeCode).catch(error => {
+    pointerStatus.textContent = error.message;
+  }).finally(() => { pointerBusy = false; });
+  return true;
+}
